@@ -1,9 +1,11 @@
-# NTON Specification v0.02
+# NTON Specification v0.03
 
 ## 1. Introduction
 Nested Table Optimized Notation (NTON) is a schema-driven serialization format. It achieves high data density by defining data structures (`DEF`) and recurring values (`REF`) in a header, allowing the data body to use positional encoding with optional field names for clarity.
 
 NTON is designed for LLM contexts where token efficiency matters, while maintaining robustness and evolvability.
+
+**v0.03 Focus:** Eliminates off-by-one errors and enables truncation detection through mandatory naming rules and optional metadata.
 
 ## 2. Document Structure
 An NTON document consists of three optional sections, which MUST appear in this order:
@@ -50,7 +52,40 @@ DEF Project: {
 }
 ```
 
-### 3.2 Reference Tables (REF)
+### 3.2 Field Naming Rules (CRITICAL)
+
+To prevent off-by-one errors and ambiguity, NTON enforces the following rules:
+
+**Rule 1: Optional fields MUST use named syntax when present.**
+
+```nton
+DEF User: { id, name, email?, phone? }
+
+# VALID:
+{U1, "Alice", email="alice@example.com"}          # Named optional field
+{U2, "Bob", email="bob@example.com", phone="+1-555-1234"}
+{U3, "Carol"}                                      # Optional fields omitted
+
+# INVALID:
+{U4, "Dave", "dave@example.com"}                  # Ambiguous - is this email or phone?
+```
+
+**Rule 2: Positional encoding can only be used for required fields.**
+
+```nton
+DEF Task: { id, title, priority, hours? }
+
+# VALID:
+{T1, "Fix bug", 8}                    # Required fields positional, optional omitted
+{T2, "Add feature", 5, hours=40}      # Required positional, optional named
+
+# INVALID:
+{T3, "Refactor", 3, 20}               # Last field MUST be named (hours=20)
+```
+
+**Rationale:** This eliminates ambiguity when optional fields are sparse or when data is truncated.
+
+### 3.3 Reference Tables (REF)
 
 Reference tables allow string deduplication via variable substitution.
 
@@ -165,14 +200,26 @@ Objects and arrays can be nested to any depth using explicit delimiters.
 
 A stream begins with `STREAM <TypeName>:` followed by one or more records.
 
+**Syntax:** `STREAM <TypeName> [(count=N)]:` where count is optional.
+
 **Simple Stream:**
 
 ```nton
-STREAM User:
-{U1, "Alice", "alice@example.com"}
-{U2, "Bob", "bob@example.com"}
-{U3, "Carol", email=null}  # Optional field omitted
+STREAM User (count=3):
+{U1, "Alice", email="alice@example.com"}
+{U2, "Bob", email="bob@example.com"}
+{U3, "Carol"}  # Optional field omitted
 ```
+
+**Without count (streaming contexts):**
+
+```nton
+STREAM User:
+{U1, "Alice", email="alice@example.com"}
+{U2, "Bob", email="bob@example.com"}
+```
+
+**Benefit:** Parsers can detect truncation by comparing actual vs expected record count.
 
 **Nested Stream:**
 
@@ -204,6 +251,30 @@ STREAM Project:
 */
 ```
 
+### 4.6 Truncation Markers
+
+Use `...` to explicitly indicate intentional truncation or partial data display.
+
+```nton
+# Showing first 2 of 1000 records
+STREAM User (count=1000):
+{U1, "Alice", email="alice@example.com"}
+{U2, "Bob", email="bob@example.com"}
+...
+```
+
+**Arrays with truncation:**
+
+```nton
+workers=[
+  {W1, 65.50, manager="Alice"},
+  {W2, 85.00, manager="Bob"},
+  ...
+]
+```
+
+**Benefit:** Distinguishes intentional truncation from parsing errors.
+
 ## 5. Grammar (ABNF Summary)
 
 ```abnf
@@ -211,11 +282,13 @@ document      = *definition *reference *stream
 definition    = "DEF" SP type-name ":" SP "{" field-list "}" LF
 field         = field-name [":" type-name] ["?"]
 reference     = "REF" SP ref-name ":" SP "{" var-list "}" LF
-stream        = "STREAM" SP type-name ":" LF *record
+stream        = "STREAM" SP type-name [SP "(" "count" "=" number ")"] ":" LF *record
 record        = object LF
 object        = "{" [field-value *("," field-value)] "}"
 field-value   = [field-name "="] value
-array         = "[" [value *("," value)] "]"
+              ; field-name "=" REQUIRED for optional fields when present
+array         = "[" [value *("," value) ["," "..."]] "]"
+              ; "..." indicates explicit truncation
 value         = primitive / object / array / variable
 primitive     = string / number / boolean / null / date
 ```
@@ -226,14 +299,19 @@ primitive     = string / number / boolean / null / date
 
 Fields marked with `?` in the DEF can be omitted or set to `null`.
 
+**IMPORTANT:** When present, optional fields MUST use named syntax (see section 3.2).
+
 ```nton
 DEF User: { id, name, email?, phone? }
 
 # All valid:
-{U1, "Alice", "alice@example.com", "(555) 1234"}
-{U2, "Bob", "bob@example.com"}
-{U3, "Carol", email=null, phone=null}
-{U4, "Dave"}  # email and phone omitted
+{U1, "Alice", email="alice@example.com", phone="(555) 1234"}  # Named
+{U2, "Bob", email="bob@example.com"}                           # Named
+{U3, "Carol", email=null, phone=null}                          # Explicit null
+{U4, "Dave"}                                                    # Omitted
+
+# INVALID (v0.03):
+{U5, "Eve", "eve@example.com", "(555) 1234"}  # Positional optional fields
 ```
 
 ### Schema Evolution
@@ -250,14 +328,22 @@ DEF User: { id, name, email, phone?, created_at? }
 
 Old data remains valid under the new schema.
 
-## 7. Error Handling
+## 7. Error Handling and Validation
+
+Parsers MUST validate:
+
+* **Required fields:** Missing required fields are parse errors
+* **Optional field syntax:** Optional fields present without names are errors (v0.03+)
+* **Unclosed delimiters:** `{` `[` without matching `}` `]` are errors
+* **Type mismatches:** Attempt coercion, error if impossible
+* **Record counts:** Mismatch between declared count and actual count triggers warning
 
 Parsers SHOULD be forgiving:
 
 * **Trailing commas:** Allowed and ignored
 * **Missing optional fields:** Treated as `null`
 * **Extra unknown fields:** Ignored with a warning
-* **Type mismatches:** Attempt coercion, error if impossible
+* **Whitespace variations:** Flexible indentation and line breaks
 
 ## 8. File Extension and MIME Type
 
@@ -267,7 +353,7 @@ Parsers SHOULD be forgiving:
 ## 9. Complete Example
 
 ```nton
-# GlobalTech Project Data - NTON v0.02
+# GlobalTech Project Data - NTON v0.03
 
 DEF Worker: { id, rate, manager_name? }
 
@@ -300,7 +386,7 @@ REF Managers: {
   $Carol: "Carol"
 }
 
-STREAM Project:
+STREAM Project (count=2):
 {
   P001,
   "Alpha Initiative",
@@ -314,8 +400,8 @@ STREAM Project:
       2025-12-15,
       1.0,
       workers=[
-        {W1, 65.50, $Alice},
-        {W2, 85.00, $Bob}
+        {W1, 65.50, manager_name=$Alice},
+        {W2, 85.00, manager_name=$Bob}
       ]
     },
     {
@@ -323,8 +409,8 @@ STREAM Project:
       2026-01-20,
       0.9,
       workers=[
-        {W1, 65.50, $Alice},
-        {W3, 72.25, $Carol}
+        {W1, 65.50, manager_name=$Alice},
+        {W3, 72.25, manager_name=$Carol}
       ]
     }
   ]
@@ -353,3 +439,15 @@ STREAM Project:
 | Flexible whitespace | LLM-friendly, human-friendly |
 | No count markers | Simpler, less error-prone |
 | Hybrid syntax | Balance between compression and readability |
+
+## 11. Key Improvements in v0.03
+
+| Feature | Benefit |
+|---------|---------|
+| **Mandatory names for optional fields** | Eliminates off-by-one errors and ambiguity |
+| **Optional stream record counts** | Enables truncation detection |
+| **Explicit truncation markers (`...`)** | Distinguishes intentional vs accidental truncation |
+| **Strict validation rules** | Catches errors early in parsing |
+| **Required field enforcement** | Prevents incomplete data |
+
+**Breaking change from v0.02:** Optional fields MUST use named syntax when present. This trade-off sacrifices ~10-20% token efficiency on sparse data to gain robustness and eliminate parsing ambiguity.

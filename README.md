@@ -34,7 +34,7 @@ REF Status: { $IP:"In Progress", $C:"Completed" }
 ### The Stream
 
 ```nton
-STREAM Project:
+STREAM Project (count=1):
 {
   P001,
   "Alpha Initiative",
@@ -47,17 +47,19 @@ STREAM Project:
       2025-12-15,
       1.0,
       workers=[
-        {W1, 65.5, "Alice"},
-        {W2, 85.0, "Bob"}
+        {W1, 65.5, manager="Alice"},
+        {W2, 85.0, manager="Bob"}
       ]
     }
   ]
 }
 ```
 
-**Key Features:**
+**Key Features (v0.03):**
 - Explicit delimiters `{ }` `[ ]` - robust parsing, no whitespace sensitivity
 - Optional field names - `status=$IP` for clarity, or pure positional for brevity
+- **Mandatory names for optional fields** - prevents off-by-one errors
+- Optional record counts - enables truncation detection
 - Optional fields with `?` - schema evolution without breaking changes
 
 ## Complex Example
@@ -85,7 +87,7 @@ REF Status: { $IP:"In Progress", $C:"Completed", $P:"Planning" }
 REF Priority: { $CR:"Critical", $H:"High", $M:"Medium", $L:"Low" }
 REF Depts: { $ENG:"Engineering", $PROD:"Product", $DES:"Design" }
 
-STREAM Project:
+STREAM Project (count=1):
 {
   PROJ001,
   "Cloud Platform Modernization",
@@ -98,7 +100,7 @@ STREAM Project:
   end_date=2025-06-30,
   project_manager={
     PM001, "Sarah Chen", "sarah.chen@company.com",
-    "+1-555-0101", "Senior Program Manager", $PROD
+    phone="+1-555-0101", "Senior Program Manager", $PROD
   },
   sprints=[
     {
@@ -113,11 +115,13 @@ STREAM Project:
           $C, $H,
           assigned_to={
             ENG001, "Alex Rodriguez", "alex.r@company.com",
-            "+1-555-0201", "Cloud Architect", $ENG
+            phone="+1-555-0201", "Cloud Architect", $ENG
           },
-          2024-01-15, 2024-01-22, completed_date=2024-01-20,
+          2024-01-15, 2024-01-22,
+          completed_date=2024-01-20,
           tags=["aws", "infrastructure", "networking"],
-          estimated_hours=40, actual_hours=35
+          estimated_hours=40,
+          actual_hours=35
         },
         {
           TSK002, "Set up Kubernetes cluster",
@@ -125,16 +129,18 @@ STREAM Project:
           $C, $CR,
           assigned_to={
             ENG002, "Maria Santos", "maria.s@company.com",
-            "+1-555-0202", "DevOps Engineer", $ENG
+            phone="+1-555-0202", "DevOps Engineer", $ENG
           },
-          2024-01-23, 2024-02-05, completed_date=2024-02-03,
+          2024-01-23, 2024-02-05,
+          completed_date=2024-02-03,
           tags=["kubernetes", "eks", "container-orchestration"],
-          estimated_hours=80, actual_hours=85
+          estimated_hours=80,
+          actual_hours=85
         }
       ],
       team_members=[
-        {ENG001, "Alex Rodriguez", "alex.r@company.com", "+1-555-0201", "Cloud Architect", $ENG},
-        {ENG002, "Maria Santos", "maria.s@company.com", "+1-555-0202", "DevOps Engineer", $ENG}
+        {ENG001, "Alex Rodriguez", "alex.r@company.com", phone="+1-555-0201", "Cloud Architect", $ENG},
+        {ENG002, "Maria Santos", "maria.s@company.com", phone="+1-555-0202", "DevOps Engineer", $ENG}
       ]
     }
   ]
