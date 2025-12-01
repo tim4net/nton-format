@@ -1,0 +1,7 @@
+# Analysis and internal docs (not for public repo)
+.analysis/
+*.pyc
+__pycache__/
+.venv/
+venv/
+.env

@@ -1,0 +1,193 @@
+# GlobalTech Quadruple Nested Data
+# NTON v0.02
+
+# --- 1. SCHEMAS ---
+DEF Worker: { id, rate, manager_name? }
+
+DEF Milestone: {
+  name,
+  date,
+  completion,
+  workers:Worker[]?
+}
+
+DEF Project: {
+  id,
+  name,
+  status,
+  active,
+  manager_id?,
+  budget,
+  milestones:Milestone[]?
+}
+
+DEF Manager: { id, name, department, phone? }
+
+DEF Customer: { id, company, active_since, tier }
+
+# --- 2. REFERENCES (Deduplication) ---
+REF Status: {
+  $IP: "In Progress",
+  $C:  "Completed",
+  $P:  "Planning"
+}
+
+REF Depts: {
+  $T: "Technology",
+  $M: "Marketing",
+  $F: "Finance",
+  $S: "Security",
+  $O: "Operations",
+  $H: "HR"
+}
+
+REF Managers: {
+  $Alice: "Alice",
+  $Bob: "Bob",
+  $Carol: "Carol",
+  $David: "David",
+  $Eva: "Eva"
+}
+
+# --- 3. DATA STREAM ---
+
+STREAM Project:
+{
+  P001,
+  "Alpha Initiative",
+  status=$IP,
+  active=T,
+  manager_id=M1,
+  budget=500000,
+  milestones=[
+    {
+      "Design Sprints",
+      2025-12-15,
+      1.0,
+      workers=[
+        {W1, 65.50, $Alice},
+        {W2, 85.00, $Bob}
+      ]
+    },
+    {
+      "Prototype Approval",
+      2026-01-20,
+      0.9,
+      workers=[
+        {W1, 65.50, $Alice},
+        {W3, 72.25, $Carol}
+      ]
+    },
+    {
+      "Code Freeze",
+      2026-02-15,
+      0.75,
+      workers=[
+        {W2, 85.00, $Bob},
+        {W4, 90.00, $David}
+      ]
+    },
+    {
+      "Beta Test Start",
+      2026-03-01,
+      0.50,
+      workers=[
+        {W3, 72.25, $Carol},
+        {W5, 60.00, $Eva}
+      ]
+    },
+    {
+      "Final Launch Prep",
+      2026-04-01,
+      0.00,
+      workers=[
+        {W1, 65.50, $Alice},
+        {W5, 60.00, $Eva}
+      ]
+    }
+  ]
+}
+
+{
+  P002,
+  "HR Portal V2",
+  status=$C,
+  active=F,
+  manager_id=M2,
+  budget=120000,
+  milestones=[
+    {
+      "Requirements Signed",
+      2025-10-01,
+      1.0,
+      workers=[
+        {W3, 72.25, $Carol},
+        {W4, 90.00, $David}
+      ]
+    },
+    {
+      "Wireframes Approved",
+      2025-10-15,
+      1.0,
+      workers=[
+        {W2, 85.00, $Bob},
+        {W3, 72.25, $Carol}
+      ]
+    },
+    {
+      "Initial Launch",
+      2025-11-20,
+      1.0,
+      workers=[
+        {W1, 65.50, $Alice},
+        {W4, 90.00, $David}
+      ]
+    },
+    {
+      "Post Launch Review",
+      2025-12-05,
+      1.0,
+      workers=[{W5, 60.00, $Eva}]
+    },
+    {
+      "Phase 2 Planning",
+      2026-01-01,
+      1.0,
+      workers=[
+        {W1, 65.50, $Alice},
+        {W2, 85.00, $Bob}
+      ]
+    }
+  ]
+}
+
+{
+  P003,
+  "Security Audit Platform",
+  status=$P,
+  active=T,
+  budget=300000,
+  milestones=[
+    {
+      "Threat Modeling",
+      2026-02-01,
+      0.3,
+      workers=[
+        {W4, 90.00, $David},
+        {W5, 60.00, $Eva}
+      ]
+    }
+  ]
+}
+
+STREAM Manager:
+{M1, "Alice Smith", $T, "(555) 123-4567"}
+{M2, "Bob Johnson", $M, "(555) 987-6543"}
+{M3, "Carol Diaz", $F, "(555) 234-5678"}
+{M4, "David Lee", $S, "(555) 345-6789"}
+{M5, "Eva Green", $O}  # phone optional
+
+STREAM Customer:
+{C100, "Acme Corp", 2023-05-15, "Premium"}
+{C101, "Beta Solutions", 2024-01-20, "Standard"}
+{C102, "Innovate Labs", 2024-03-10, "Enterprise"}
